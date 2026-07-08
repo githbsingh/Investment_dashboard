@@ -1,5 +1,74 @@
 import { NextResponse } from "next/server";
-import { getStockData } from "@/lib/data-provider";
+import { getStockData, StockData } from "@/lib/data-provider";
+
+// Helper function to convert all USD prices inside StockData to INR (Rupees)
+function convertToINR(data: StockData, rate: number): StockData {
+  const convertPrice = (usdPriceStr: string) => {
+    const price = parseFloat(usdPriceStr.replace(/[^0-9.]/g, ""));
+    if (isNaN(price)) return usdPriceStr;
+    return (price * rate).toFixed(2);
+  };
+
+  const convertMktCap = (usdMktCapStr: string) => {
+    // e.g. "3.48T" or "420B" -> converted to INR equivalents
+    const match = usdMktCapStr.match(/^([0-9.]+)([TBMk]?)$/);
+    if (!match) return usdMktCapStr;
+    
+    const value = parseFloat(match[1]);
+    const multiplier = match[2];
+    
+    let numericValue = value;
+    if (multiplier === "T") numericValue *= 1e12;
+    else if (multiplier === "B") numericValue *= 1e9;
+    else if (multiplier === "M") numericValue *= 1e6;
+    
+    const inrValue = numericValue * rate;
+    
+    if (inrValue >= 1e12) {
+      return (inrValue / 1e12).toFixed(2) + "T";
+    } else if (inrValue >= 1e9) {
+      return (inrValue / 1e9).toFixed(1) + "B";
+    } else if (inrValue >= 1e6) {
+      return (inrValue / 1e6).toFixed(1) + "M";
+    }
+    return inrValue.toFixed(0);
+  };
+
+  // Convert metadata
+  const convertedMetadata = {
+    ...data.metadata,
+    currentPrice: convertPrice(data.metadata.currentPrice),
+    priceChange: (data.metadata.isPositive ? "+" : "") + (parseFloat(data.metadata.priceChange) * rate).toFixed(2),
+  };
+
+  // Convert stats
+  const convertedStats = {
+    ...data.stats,
+    open: convertPrice(data.stats.open),
+    prevClose: convertPrice(data.stats.prevClose),
+    dayHigh: convertPrice(data.stats.dayHigh),
+    dayLow: convertPrice(data.stats.dayLow),
+    fiftyTwoWeekHigh: convertPrice(data.stats.fiftyTwoWeekHigh),
+    fiftyTwoWeekLow: convertPrice(data.stats.fiftyTwoWeekLow),
+    mktCap: convertMktCap(data.stats.mktCap),
+  };
+
+  // Convert charts
+  const convertedCharts: typeof data.charts = {};
+  for (const interval in data.charts) {
+    convertedCharts[interval] = data.charts[interval].map((point) => ({
+      ...point,
+      price: Number((point.price * rate).toFixed(2)),
+    }));
+  }
+
+  return {
+    ...data,
+    metadata: convertedMetadata,
+    stats: convertedStats,
+    charts: convertedCharts,
+  };
+}
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -8,10 +77,42 @@ export async function GET(request: Request) {
 
   const apiKey = process.env.TWELVEDATA_API_KEY;
 
+  // Get current USD/INR exchange rate (with fallbacks)
+  let exchangeRate = 95.58; // Default fallback matching local 2026 rates
+  
+  try {
+    // Attempt to query a free, keyless exchange rate API first
+    const currencyRes = await fetch("https://open.er-api.com/v6/latest/USD");
+    if (currencyRes.ok) {
+      const currencyData = await currencyRes.json();
+      if (currencyData.rates && currencyData.rates.INR) {
+        exchangeRate = parseFloat(currencyData.rates.INR);
+      }
+    }
+  } catch (e) {
+    console.error("Open exchange rate query failed, trying Twelve Data config:", e);
+    // If keyless fails but we have Twelve Data, query Twelve Data
+    if (apiKey) {
+      try {
+        const rateUrl = `https://api.twelvedata.com/exchange_rate?symbol=USD/INR&apikey=${apiKey}`;
+        const rateRes = await fetch(rateUrl);
+        if (rateRes.ok) {
+          const rateData = await rateRes.json();
+          if (rateData.rate) {
+            exchangeRate = parseFloat(rateData.rate);
+          }
+        }
+      } catch (err) {
+        console.error("Twelve Data exchange rate lookup failed:", err);
+      }
+    }
+  }
+
   // Fallback to high-fidelity mock data if no API Key is set
   if (!apiKey) {
     const mockData = getStockData(ticker);
-    return NextResponse.json(mockData);
+    const inrMockData = convertToINR(mockData, exchangeRate);
+    return NextResponse.json(inrMockData);
   }
 
   try {
@@ -35,10 +136,10 @@ export async function GET(request: Request) {
     
     if (interval === "1D") {
       tdInterval = "5min";
-      outputSize = 78; // Covers typical 6.5 hour trading day (78 * 5 mins)
+      outputSize = 78;
     } else if (interval === "1W") {
       tdInterval = "30min";
-      outputSize = 70; // 5 trading days (14 intervals per day)
+      outputSize = 70;
     } else if (interval === "1M") {
       tdInterval = "1day";
       outputSize = 30;
@@ -78,7 +179,7 @@ export async function GET(request: Request) {
           const min = timeParts[1];
           const ampm = hour >= 12 ? "PM" : "AM";
           hour = hour % 12;
-          hour = hour ? hour : 12; // Handle 0 as 12 AM
+          hour = hour ? hour : 12;
           
           if (interval === "1D") {
             formattedDate = `${hour}:${min} ${ampm}`;
@@ -108,7 +209,7 @@ export async function GET(request: Request) {
         date: formattedDate,
         price: parseFloat(v.close),
       };
-    }).reverse(); // Order from oldest to newest for linear graphing
+    }).reverse();
 
     charts[interval] = points;
 
@@ -135,7 +236,7 @@ export async function GET(request: Request) {
         priceChange,
         percentChange,
         isPositive,
-        isDemo: false, // Running on real data!
+        isDemo: false,
       },
       stats: {
         open: parseFloat(quoteData.open || "0").toFixed(2),
@@ -149,17 +250,17 @@ export async function GET(request: Request) {
         peRatio: quoteData.pe ? parseFloat(quoteData.pe).toFixed(1) : "N/A",
       },
       charts,
-      // Fallback news feed uses database procedurals
       news: getStockData(ticker).news,
     };
 
-    return NextResponse.json(realData);
+    // 6. Convert real stock data from USD to INR
+    const inrRealData = convertToINR(realData, exchangeRate);
+    return NextResponse.json(inrRealData);
   } catch (error: any) {
-    console.error("Live Stock API fetch failed, transparently falling back to mock data:", error);
-    
-    // Transparently fallback to mock data on error/rate limit exceeded
+    console.error("Live Stock API fetch failed, falling back to converted mock:", error);
     const mockData = getStockData(ticker);
-    mockData.metadata.isDemo = true; // Flag it as demo
-    return NextResponse.json(mockData);
+    const inrMockData = convertToINR(mockData, exchangeRate);
+    inrMockData.metadata.isDemo = true;
+    return NextResponse.json(inrMockData);
   }
 }

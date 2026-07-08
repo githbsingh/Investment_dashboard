@@ -9,14 +9,14 @@ interface KeyStatisticsProps {
 
 export default function KeyStatistics({ stats }: KeyStatisticsProps) {
   const statItems = [
-    { label: "Open", value: stats.open },
-    { label: "Prev Close", value: stats.prevClose },
-    { label: "Day High", value: stats.dayHigh },
-    { label: "Day Low", value: stats.dayLow },
-    { label: "52W High", value: stats.fiftyTwoWeekHigh },
-    { label: "52W Low", value: stats.fiftyTwoWeekLow },
+    { label: "Open", value: `₹${stats.open}` },
+    { label: "Prev Close", value: `₹${stats.prevClose}` },
+    { label: "Day High", value: `₹${stats.dayHigh}` },
+    { label: "Day Low", value: `₹${stats.dayLow}` },
+    { label: "52W High", value: `₹${stats.fiftyTwoWeekHigh}` },
+    { label: "52W Low", value: `₹${stats.fiftyTwoWeekLow}` },
     { label: "Volume", value: stats.volume },
-    { label: "Mkt Cap", value: stats.mktCap },
+    { label: "Mkt Cap", value: stats.mktCap !== "N/A" ? `₹${stats.mktCap}` : "N/A" },
     { label: "P/E Ratio", value: stats.peRatio },
   ];
 

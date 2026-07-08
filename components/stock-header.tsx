@@ -44,7 +44,7 @@ export default function StockHeader({
         {/* Quote Pricing */}
         <div className="flex flex-col md:items-end space-y-1">
           <div className="text-3xl font-extrabold text-white tracking-tight">
-            ${currentPrice}
+            ₹{currentPrice}
           </div>
           <div
             className={`flex items-center text-sm font-semibold tracking-wide ${
@@ -57,7 +57,7 @@ export default function StockHeader({
               <ArrowDownRight className="h-4 w-4 mr-0.5 shrink-0" />
             )}
             <span>
-              {priceChange} ({percentChange})
+              {isPositive ? "+" : "-"}₹{Math.abs(parseFloat(priceChange)).toFixed(2)} ({percentChange})
             </span>
             <span className="text-zinc-500 font-normal ml-1.5">today</span>
           </div>

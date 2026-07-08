@@ -36,7 +36,7 @@ export default function PriceChart({ data, isPositive }: PriceChartProps) {
             {payload[0].payload.date}
           </p>
           <p className="text-sm text-white font-extrabold">
-            ${payload[0].value.toFixed(2)}
+            ₹{payload[0].value.toFixed(2)}
           </p>
         </div>
       );
@@ -102,7 +102,7 @@ export default function PriceChart({ data, isPositive }: PriceChartProps) {
               axisLine={false}
               dx={-5}
               fontWeight={500}
-              tickFormatter={(value) => `$${value.toFixed(0)}`}
+              tickFormatter={(value) => `₹${value.toFixed(0)}`}
             />
             <Tooltip content={<CustomTooltip />} cursor={{ stroke: "#3f3f46", strokeWidth: 1 }} />
             <Area
