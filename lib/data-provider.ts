@@ -32,6 +32,7 @@ export interface StockMetadata {
   priceChange: string;
   percentChange: string;
   isPositive: boolean;
+  isDemo?: boolean;
 }
 
 export interface StockData {
@@ -301,7 +302,13 @@ export function getStockData(tickerSymbol: string): StockData {
   const ticker = tickerSymbol.trim().toUpperCase();
   
   if (stockDataRegistry[ticker]) {
-    return stockDataRegistry[ticker];
+    return {
+      ...stockDataRegistry[ticker],
+      metadata: {
+        ...stockDataRegistry[ticker].metadata,
+        isDemo: true,
+      },
+    };
   }
 
   // Fallback procedural stock generator
@@ -369,6 +376,7 @@ export function getStockData(tickerSymbol: string): StockData {
       priceChange,
       percentChange,
       isPositive,
+      isDemo: true,
     },
     stats: {
       open,
